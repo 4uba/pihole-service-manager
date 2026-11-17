@@ -1,0 +1,250 @@
+:root{
+    --bg:#0f172a;
+    --panel:#1e293b;
+    --panel2:#263549;
+    --border:#334155;
+    --text:#f8fafc;
+    --muted:#94a3b8;
+    --green:#22c55e;
+    --red:#ef4444;
+    --ai:#9333ea;
+    --stream:#dc2626;
+    --gaming:#2563eb;
+    --social:#16a34a;
+    --shopping:#f59e0b;
+    --messenger:#06b6d4;
+}
+
+*{
+    box-sizing:border-box;
+}
+
+body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:
+        Inter,
+        Segoe UI,
+        Arial,
+        sans-serif;
+}
+
+.container{
+    max-width:1600px;
+    margin:auto;
+    padding:25px;
+}
+
+.header{
+    margin-bottom:20px;
+}
+
+.stats{
+    display:flex;
+    gap:15px;
+    flex-wrap:wrap;
+    margin-bottom:25px;
+}
+
+.stat{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:15px;
+
+    min-width:150px;
+
+    padding:18px;
+}
+
+.stat-value{
+    font-size:28px;
+    font-weight:700;
+}
+
+.stat-label{
+    color:var(--muted);
+}
+
+.toolbar{
+    display:flex;
+    gap:12px;
+    flex-wrap:wrap;
+    margin-bottom:18px;
+}
+
+.search{
+    flex:1;
+    min-width:300px;
+
+    border:none;
+
+    padding:14px;
+
+    border-radius:12px;
+
+    background:var(--panel);
+    color:white;
+}
+
+.categories{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+
+    margin-bottom:25px;
+}
+
+.category-btn{
+    border:none;
+
+    padding:10px 16px;
+
+    border-radius:999px;
+
+    background:var(--panel);
+
+    color:white;
+
+    cursor:pointer;
+}
+
+.category-btn.active{
+    background:var(--green);
+    color:black;
+}
+
+.grid{
+    display:grid;
+
+    grid-template-columns:
+        repeat(auto-fill,minmax(270px,1fr));
+
+    gap:15px;
+}
+
+.card{
+    background:var(--panel);
+
+    border:1px solid var(--border);
+
+    border-radius:16px;
+
+    padding:16px;
+
+    transition:.2s;
+}
+
+.card:hover{
+    transform:translateY(-2px);
+}
+
+.card.blocked{
+    border-color:var(--green);
+    box-shadow:
+        0 0 0 1px var(--green);
+}
+
+.card-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+}
+
+.badge{
+    border-radius:8px;
+
+    padding:6px 10px;
+
+    font-size:12px;
+
+    font-weight:700;
+
+    color:white;
+}
+
+.badge.ai{
+    background:var(--ai);
+}
+
+.badge.streaming{
+    background:var(--stream);
+}
+
+.badge.gaming{
+    background:var(--gaming);
+}
+
+.badge.social_network{
+    background:var(--social);
+}
+
+.badge.shopping{
+    background:var(--shopping);
+}
+
+.badge.messenger{
+    background:var(--messenger);
+}
+
+.badge.default{
+    background:#475569;
+}
+
+.name{
+    margin-top:14px;
+
+    font-size:20px;
+    font-weight:700;
+}
+
+.meta{
+    margin-top:8px;
+
+    color:var(--muted);
+}
+
+.status{
+    margin-top:12px;
+
+    font-weight:700;
+}
+
+.status.allowed{
+    color:var(--muted);
+}
+
+.status.blocked{
+    color:var(--green);
+}
+
+.big{
+    color:#f59e0b;
+    font-weight:700;
+}
+
+.toggle-btn{
+
+    margin-top:12px;
+
+    width:100%;
+
+    border:none;
+
+    padding:10px;
+
+    border-radius:10px;
+
+    cursor:pointer;
+
+    font-weight:700;
+
+    background:#22c55e;
+
+    color:white;
+}
+
+.card.blocked .toggle-btn{
+
+    background:#ef4444;
+}
