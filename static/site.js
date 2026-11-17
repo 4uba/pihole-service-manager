@@ -1,49 +1,95 @@
 let services = [];
 let currentCategory = "all";
 
+const CATEGORY_NAMES = {
+    ai: "AI Assistants",
+    cdn: "CDN & Infrastructure",
+    dating: "Dating",
+    gambling: "Gambling",
+    gaming: "Gaming",
+    hosting: "Cloud & Hosting",
+    messenger: "Messaging",
+    privacy: "Privacy & Security",
+    shopping: "Shopping",
+    social_network: "Social Networks",
+    software: "Software",
+    streaming: "Streaming Media"
+};
+
 async function load() {
-    const response = await fetch("/api/services");
-    const data = await response.json();
 
-    services = data.services;
+    const response =
+        await fetch("/api/services");
 
-    renderPage(data);
+    const data =
+        await response.json();
+
+    services =
+        data.services;
+
+    renderShell(data);
+
     buildCategories();
+
     draw();
 }
 
-function renderPage(data) {
+function categoryLabel(category){
+
+    return (
+        CATEGORY_NAMES[category] ||
+        category
+            .replaceAll('_', ' ')
+            .replace(/\b\w/g, c => c.toUpperCase())
+    );
+}
+
+function renderShell(data){
 
     document.getElementById("app").innerHTML = `
-        <h1>Blocked Services</h1>
+        <div class="header">
 
-        <div class="subtitle">
-            Allows to quickly block popular sites and services.
-            (${data.stats.services} services,
-             ${data.stats.domains} domains,
-             ${data.stats.enabled} blocked)
+            <h1>Blocked Services</h1>
+
+            <div class="subtitle">
+                ${data.stats.services} services •
+                ${data.stats.domains} domains •
+                ${data.stats.enabled} blocked
+            </div>
+
         </div>
 
-        <input
-            id="search"
-            class="search"
-            placeholder="Search service..."
-            oninput="draw()"
-        >
+        <div class="toolbar">
+
+            <input
+                id="search"
+                class="search"
+                placeholder="Search services..."
+                oninput="draw()">
+
+            <button
+                class="update-btn"
+                onclick="updateCatalog()">
+
+                Update Catalog
+
+            </button>
+
+        </div>
 
         <div
             id="categories"
-            class="categories"
-        ></div>
+            class="categories">
+        </div>
 
         <div
             id="grid"
-            class="grid"
-        ></div>
+            class="grid">
+        </div>
     `;
 }
 
-function buildCategories() {
+function buildCategories(){
 
     const categories =
         [...new Set(
@@ -60,40 +106,38 @@ function buildCategories() {
     div.innerHTML = `
         <button
             class="category-btn active"
-            onclick="selectCategory('all', this)"
-        >
+            onclick="selectCategory('all', this)">
             All
         </button>
     `;
 
-    categories.forEach(category => {
+    categories.forEach(cat => {
 
-        const button =
+        const btn =
             document.createElement(
                 "button"
             );
 
-        button.className =
+        btn.className =
             "category-btn";
 
-        button.innerText =
-            category;
+        btn.innerText =
+            categoryLabel(cat);
 
-        button.onclick =
+        btn.onclick =
             () => selectCategory(
-                category,
-                button
+                cat,
+                btn
             );
 
-        div.appendChild(button);
-
+        div.appendChild(btn);
     });
 }
 
 function selectCategory(
     category,
     button
-) {
+){
 
     currentCategory =
         category;
@@ -118,31 +162,31 @@ function selectCategory(
 async function toggleService(
     id,
     checkbox
-) {
+){
 
     checkbox.disabled = true;
 
-    try {
+    try{
 
         const response =
             await fetch(
-                "/api/toggle/" + id,
+                '/api/toggle/' + id,
                 {
-                    method: "POST"
+                    method:'POST'
                 }
             );
 
-        const data =
+        const result =
             await response.json();
 
-        if (!data.success) {
+        if(!result.success){
 
             checkbox.checked =
                 !checkbox.checked;
 
             alert(
-                data.error ||
-                "Toggle failed"
+                result.error ||
+                'Toggle failed'
             );
 
             return;
@@ -153,163 +197,273 @@ async function toggleService(
                 x => x.id === id
             );
 
-        if (svc) {
+        if(svc){
+
             svc.enabled =
-                data.enabled ? 1 : 0;
+                result.enabled
+                    ? 1
+                    : 0;
         }
 
-    } catch (err) {
+    }
+    catch(ex){
 
         checkbox.checked =
             !checkbox.checked;
 
         alert(
-            "Connection error"
+            'Connection error'
         );
-
-    } finally {
+    }
+    finally{
 
         checkbox.disabled = false;
     }
 }
 
-function getIcon(service) {
+function addCategoryHeader(
+    grid,
+    category
+){
 
-    const name =
-        service.name.toLowerCase();
+    const section =
+        document.createElement(
+            "div"
+        );
 
-    if (name.includes("chatgpt"))
-        return "🤖";
+    section.className =
+        "category-section";
 
-    if (name.includes("discord"))
-        return "🎮";
+    section.innerHTML = `
+        <div class="category-separator">
 
-    if (name.includes("telegram"))
-        return "✈️";
+            <div class="category-line"></div>
 
-    if (name.includes("youtube"))
-        return "▶️";
+            <div class="category-title">
+                ${categoryLabel(category)}
+            </div>
 
-    if (name.includes("facebook"))
-        return "📘";
+            <div class="category-line"></div>
 
-    if (name.includes("netflix"))
-        return "N";
+        </div>
+    `;
 
-    if (name.includes("steam"))
-        return "🎮";
-
-    return service.name
-        .charAt(0)
-        .toUpperCase();
+    grid.appendChild(section);
 }
 
-function draw() {
+function draw(){
 
     const search =
         (
             document.getElementById(
-                "search"
-            )?.value || ""
+                'search'
+            )?.value || ''
         )
         .toLowerCase();
 
     const grid =
         document.getElementById(
-            "grid"
+            'grid'
         );
 
-    if (!grid)
+    if(!grid)
         return;
 
-    grid.innerHTML = "";
+    grid.innerHTML = '';
 
-    services
-        .filter(service => {
+    const filtered =
+        services.filter(service => {
 
-            if (
-                currentCategory !== "all" &&
+            if(
+                currentCategory !== 'all' &&
                 service.category !== currentCategory
-            ) {
+            ){
                 return false;
             }
 
             return service.name
                 .toLowerCase()
                 .includes(search);
+        });
 
-        })
-        .forEach(service => {
+    let lastCategory = null;
 
-            const card =
-                document.createElement(
-                    "div"
-                );
+    filtered.forEach(service => {
 
-            card.className =
-                "card";
+        if(service.category !== lastCategory){
 
-            card.innerHTML = `
-                <div class="row">
+            addCategoryHeader(
+                grid,
+                service.category
+            );
 
-                    <div class="left">
+            lastCategory =
+                service.category;
+        }
 
-                        <div class="icon">
-                            ${getIcon(service)}
+        const card =
+            document.createElement(
+                'div'
+            );
+
+        card.className =
+            'card';
+
+        card.innerHTML = `
+            <div class="row">
+
+                <div class="left">
+
+                    <div class="info">
+
+                        <div class="title">
+                            ${service.name}
                         </div>
 
-                        <div>
-
-                            <div class="title">
-                                ${service.name}
-                            </div>
-
-                            <div class="meta">
-                                ${service.category}
-                                •
-                                ${service.domain_count}
-                                domains
-                            </div>
-
+                        <div class="meta">
+                            ${categoryLabel(service.category)}
+                            •
+                            ${service.domain_count}
+                            domains
                         </div>
 
                     </div>
 
-                    <label class="switch">
-
-                        <input
-                            type="checkbox"
-                            ${service.enabled ? "checked" : ""}
-                        >
-
-                        <span
-                            class="slider"
-                        ></span>
-
-                    </label>
-
                 </div>
-            `;
 
-            const checkbox =
-                card.querySelector(
-                    "input"
-                );
+                <label class="switch">
 
-            checkbox.addEventListener(
-                "change",
-                () =>
-                    toggleService(
-                        service.id,
-                        checkbox
-                    )
+                    <input
+                        type="checkbox"
+                        ${service.enabled ? 'checked' : ''}>
+
+                    <span
+                        class="slider">
+                    </span>
+
+                </label>
+
+            </div>
+        `;
+
+        const checkbox =
+            card.querySelector(
+                'input'
             );
 
-            grid.appendChild(
-                card
+        checkbox.addEventListener(
+            'change',
+            () =>
+                toggleService(
+                    service.id,
+                    checkbox
+                )
+        );
+
+        grid.appendChild(
+            card
+        );
+    });
+}
+
+function showToast(message, success = true){
+
+    let toast =
+        document.getElementById(
+            "toast"
+        );
+
+    if(!toast){
+
+        toast =
+            document.createElement(
+                "div"
             );
 
-        });
+        toast.id = "toast";
+
+        document.body.appendChild(
+            toast
+        );
+    }
+
+    toast.className =
+        success
+            ? "toast success show"
+            : "toast error show";
+
+    toast.textContent =
+        message;
+
+    clearTimeout(
+        window.toastTimer
+    );
+
+    window.toastTimer =
+        setTimeout(() => {
+
+            toast.classList.remove(
+                "show"
+            );
+
+        }, 3000);
+}
+
+async function updateCatalog(){
+
+    const btn =
+        document.querySelector(
+            ".update-btn"
+        );
+
+    const oldText =
+        btn.innerText;
+
+    btn.disabled = true;
+    btn.innerText =
+        "Updating...";
+
+    try{
+
+        const response =
+            await fetch(
+                "/api/catalog/update",
+                {
+                    method: "POST"
+                }
+            );
+
+        const result =
+            await response.json();
+
+        if(!result.success){
+
+            throw new Error(
+                result.error ||
+                "Catalog update failed"
+            );
+        }
+
+        showToast(
+            result.message,
+            true
+        );
+
+        await load();
+    }
+    catch(ex){
+
+        showToast(
+            ex.message,
+            false
+        );
+    }
+    finally{
+
+        btn.disabled = false;
+        btn.innerText =
+            oldText;
+    }
 }
 
 load();

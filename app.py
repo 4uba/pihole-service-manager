@@ -291,3 +291,77 @@ async def toggle(service_id: str):
 
         conn.close()
 
+
+import subprocess
+
+@app.post("/api/catalog/update")
+async def catalog_update():
+
+    try:
+
+        result = subprocess.run(
+            [
+                "python3",
+                "catalog_update.py"
+            ],
+            cwd="/app",
+            capture_output=True,
+            text=True,
+            timeout=300
+        )
+
+        if result.returncode != 0:
+
+            return JSONResponse(
+                {
+                    "success": False,
+                    "error": result.stderr
+                },
+                status_code=500
+            )
+
+        conn = db()
+
+        meta = {
+            row["key"]: row["value"]
+            for row in conn.execute(
+                """
+                select key,value
+                from catalog_meta
+                """
+            ).fetchall()
+        }
+
+        conn.close()
+
+        return JSONResponse(
+            {
+                "success": True,
+                "services": meta.get(
+                    "services_count",
+                    "0"
+                ),
+                "domains": meta.get(
+                    "domains_count",
+                    "0"
+                ),
+                "last_update": meta.get(
+                    "last_update",
+                    "unknown"
+                ),
+                "message":
+                    f"Catalog updated successfully. "
+                    f"{meta.get('services_count','0')} services, "
+                    f"{meta.get('domains_count','0')} domains."
+            }
+        )
+
+    except Exception as ex:
+
+        return JSONResponse(
+            {
+                "success": False,
+                "error": str(ex)
+            },
+            status_code=500
+        )

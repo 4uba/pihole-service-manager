@@ -17,3 +17,7 @@ services:
 
     volumes:
       - ./data:/app/data
+      - ./static:/app/static
+      - ./templates:/app/templates
+      - ./app.py:/app/app.py
+      - ./catalog_update.py:/app/catalog_update.py
