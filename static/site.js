@@ -1,5 +1,6 @@
 let services = [];
 let currentCategory = "all";
+let activeOnly = false;
 
 const CATEGORY_NAMES = {
     ai: "AI Assistants",
@@ -39,12 +40,60 @@ function categoryLabel(category){
     return (
         CATEGORY_NAMES[category] ||
         category
-            .replaceAll('_', ' ')
+            .replaceAll("_", " ")
             .replace(/\b\w/g, c => c.toUpperCase())
     );
 }
 
+function showToast(message, success = true){
+
+    let toast =
+        document.getElementById(
+            "toast"
+        );
+
+    if(!toast){
+
+        toast =
+            document.createElement(
+                "div"
+            );
+
+        toast.id = "toast";
+
+        document.body.appendChild(
+            toast
+        );
+    }
+
+    toast.className =
+        success
+            ? "toast success show"
+            : "toast error show";
+
+    toast.textContent =
+        message;
+
+    clearTimeout(
+        window.toastTimer
+    );
+
+    window.toastTimer =
+        setTimeout(() => {
+
+            toast.classList.remove(
+                "show"
+            );
+
+        }, 3000);
+}
+
 function renderShell(data){
+
+    const activeCount =
+        services.filter(
+            x => x.enabled
+        ).length;
 
     document.getElementById("app").innerHTML = `
         <div class="header">
@@ -98,6 +147,11 @@ function buildCategories(){
             )
         )].sort();
 
+    const activeCount =
+        services.filter(
+            x => x.enabled
+        ).length;
+
     const div =
         document.getElementById(
             "categories"
@@ -107,11 +161,22 @@ function buildCategories(){
         <button
             class="category-btn active"
             onclick="selectCategory('all', this)">
-            All
+            All (${services.length})
+        </button>
+
+        <button
+            class="category-btn"
+            onclick="selectActive(this)">
+            Active (${activeCount})
         </button>
     `;
 
     categories.forEach(cat => {
+
+        const count =
+            services.filter(
+                x => x.category === cat
+            ).length;
 
         const btn =
             document.createElement(
@@ -122,7 +187,7 @@ function buildCategories(){
             "category-btn";
 
         btn.innerText =
-            categoryLabel(cat);
+            `${categoryLabel(cat)} (${count})`;
 
         btn.onclick =
             () => selectCategory(
@@ -134,10 +199,34 @@ function buildCategories(){
     });
 }
 
+function selectActive(button){
+
+    activeOnly = true;
+    currentCategory = "all";
+
+    document
+        .querySelectorAll(
+            ".category-btn"
+        )
+        .forEach(
+            x => x.classList.remove(
+                "active"
+            )
+        );
+
+    button.classList.add(
+        "active"
+    );
+
+    draw();
+}
+
 function selectCategory(
     category,
     button
 ){
+
+    activeOnly = false;
 
     currentCategory =
         category;
@@ -170,9 +259,9 @@ async function toggleService(
 
         const response =
             await fetch(
-                '/api/toggle/' + id,
+                "/api/toggle/" + id,
                 {
-                    method:'POST'
+                    method:"POST"
                 }
             );
 
@@ -184,9 +273,10 @@ async function toggleService(
             checkbox.checked =
                 !checkbox.checked;
 
-            alert(
+            showToast(
                 result.error ||
-                'Toggle failed'
+                "Toggle failed",
+                false
             );
 
             return;
@@ -205,14 +295,24 @@ async function toggleService(
                     : 0;
         }
 
+        buildCategories();
+
+        if(
+            activeOnly &&
+            !result.enabled
+        ){
+            draw();
+        }
+
     }
     catch(ex){
 
         checkbox.checked =
             !checkbox.checked;
 
-        alert(
-            'Connection error'
+        showToast(
+            "Connection error",
+            false
         );
     }
     finally{
@@ -256,26 +356,33 @@ function draw(){
     const search =
         (
             document.getElementById(
-                'search'
-            )?.value || ''
+                "search"
+            )?.value || ""
         )
         .toLowerCase();
 
     const grid =
         document.getElementById(
-            'grid'
+            "grid"
         );
 
     if(!grid)
         return;
 
-    grid.innerHTML = '';
+    grid.innerHTML = "";
 
     const filtered =
         services.filter(service => {
 
             if(
-                currentCategory !== 'all' &&
+                activeOnly &&
+                !service.enabled
+            ){
+                return false;
+            }
+
+            if(
+                currentCategory !== "all" &&
                 service.category !== currentCategory
             ){
                 return false;
@@ -290,7 +397,10 @@ function draw(){
 
     filtered.forEach(service => {
 
-        if(service.category !== lastCategory){
+        if(
+            !activeOnly &&
+            service.category !== lastCategory
+        ){
 
             addCategoryHeader(
                 grid,
@@ -303,11 +413,11 @@ function draw(){
 
         const card =
             document.createElement(
-                'div'
+                "div"
             );
 
         card.className =
-            'card';
+            "card";
 
         card.innerHTML = `
             <div class="row">
@@ -335,7 +445,7 @@ function draw(){
 
                     <input
                         type="checkbox"
-                        ${service.enabled ? 'checked' : ''}>
+                        ${service.enabled ? "checked" : ""}>
 
                     <span
                         class="slider">
@@ -348,11 +458,11 @@ function draw(){
 
         const checkbox =
             card.querySelector(
-                'input'
+                "input"
             );
 
         checkbox.addEventListener(
-            'change',
+            "change",
             () =>
                 toggleService(
                     service.id,
@@ -364,49 +474,6 @@ function draw(){
             card
         );
     });
-}
-
-function showToast(message, success = true){
-
-    let toast =
-        document.getElementById(
-            "toast"
-        );
-
-    if(!toast){
-
-        toast =
-            document.createElement(
-                "div"
-            );
-
-        toast.id = "toast";
-
-        document.body.appendChild(
-            toast
-        );
-    }
-
-    toast.className =
-        success
-            ? "toast success show"
-            : "toast error show";
-
-    toast.textContent =
-        message;
-
-    clearTimeout(
-        window.toastTimer
-    );
-
-    window.toastTimer =
-        setTimeout(() => {
-
-            toast.classList.remove(
-                "show"
-            );
-
-        }, 3000);
 }
 
 async function updateCatalog(){
@@ -429,7 +496,7 @@ async function updateCatalog(){
             await fetch(
                 "/api/catalog/update",
                 {
-                    method: "POST"
+                    method:"POST"
                 }
             );
 
