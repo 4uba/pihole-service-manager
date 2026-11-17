@@ -1,68 +1,28 @@
 let services = [];
 let currentCategory = "all";
 
-async function load(){
+async function load() {
+    const response = await fetch("/api/services");
+    const data = await response.json();
 
-    const r =
-        await fetch("/api/services");
+    services = data.services;
 
-    const data =
-        await r.json();
-
-    services =
-        data.services;
-
-    document.getElementById(
-        "app"
-    ).innerHTML =
-        render(data);
-
+    renderPage(data);
     buildCategories();
-
     draw();
 }
 
-function render(data){
+function renderPage(data) {
 
-    return `
-    <div class="header">
+    document.getElementById("app").innerHTML = `
+        <h1>Blocked Services</h1>
 
-        <h1>Service Manager V3</h1>
-
-        <div class="stats">
-
-            <div class="stat">
-                <div class="stat-value">
-                    ${data.stats.services}
-                </div>
-                <div class="stat-label">
-                    Services
-                </div>
-            </div>
-
-            <div class="stat">
-                <div class="stat-value">
-                    ${data.stats.domains}
-                </div>
-                <div class="stat-label">
-                    Domains
-                </div>
-            </div>
-
-            <div class="stat">
-                <div class="stat-value">
-                    ${data.stats.enabled}
-                </div>
-                <div class="stat-label">
-                    Blocked
-                </div>
-            </div>
-
+        <div class="subtitle">
+            Allows to quickly block popular sites and services.
+            (${data.stats.services} services,
+             ${data.stats.domains} domains,
+             ${data.stats.enabled} blocked)
         </div>
-
-    </div>
-
-    <div class="toolbar">
 
         <input
             id="search"
@@ -71,46 +31,42 @@ function render(data){
             oninput="draw()"
         >
 
-    </div>
+        <div
+            id="categories"
+            class="categories"
+        ></div>
 
-    <div
-        id="categories"
-        class="categories"
-    ></div>
-
-    <div
-        id="grid"
-        class="grid"
-    ></div>
+        <div
+            id="grid"
+            class="grid"
+        ></div>
     `;
 }
 
-function buildCategories(){
+function buildCategories() {
 
     const categories =
         [...new Set(
             services.map(
                 x => x.category
             )
-        )]
-        .sort();
+        )].sort();
 
     const div =
         document.getElementById(
             "categories"
         );
 
-    div.innerHTML =
-        `
+    div.innerHTML = `
         <button
             class="category-btn active"
-            onclick="selectCategory('all',this)"
+            onclick="selectCategory('all', this)"
         >
             All
         </button>
-        `;
+    `;
 
-    categories.forEach(cat => {
+    categories.forEach(category => {
 
         const button =
             document.createElement(
@@ -121,21 +77,23 @@ function buildCategories(){
             "category-btn";
 
         button.innerText =
-            cat;
+            category;
 
         button.onclick =
             () => selectCategory(
-                cat,
+                category,
                 button
             );
 
         div.appendChild(button);
 
     });
-
 }
 
-function selectCategory(category,button){
+function selectCategory(
+    category,
+    button
+) {
 
     currentCategory =
         category;
@@ -157,39 +115,96 @@ function selectCategory(category,button){
     draw();
 }
 
-async function toggleService(id){
+async function toggleService(
+    id,
+    checkbox
+) {
 
-    const r =
-        await fetch(
-            "/api/toggle/" + id,
-            {
-                method:"POST"
-            }
-        );
+    checkbox.disabled = true;
 
-    const result =
-        await r.json();
+    try {
 
-    if(!result.success){
+        const response =
+            await fetch(
+                "/api/toggle/" + id,
+                {
+                    method: "POST"
+                }
+            );
+
+        const data =
+            await response.json();
+
+        if (!data.success) {
+
+            checkbox.checked =
+                !checkbox.checked;
+
+            alert(
+                data.error ||
+                "Toggle failed"
+            );
+
+            return;
+        }
+
+        const svc =
+            services.find(
+                x => x.id === id
+            );
+
+        if (svc) {
+            svc.enabled =
+                data.enabled ? 1 : 0;
+        }
+
+    } catch (err) {
+
+        checkbox.checked =
+            !checkbox.checked;
+
         alert(
-            result.error || "Toggle failed"
+            "Connection error"
         );
-        return;
+
+    } finally {
+
+        checkbox.disabled = false;
     }
-
-    const svc =
-        services.find(
-            x => x.id === id
-        );
-
-    if(svc)
-        svc.enabled =
-            result.enabled ? 1 : 0;
-
-    draw();
 }
 
-function draw(){
+function getIcon(service) {
+
+    const name =
+        service.name.toLowerCase();
+
+    if (name.includes("chatgpt"))
+        return "🤖";
+
+    if (name.includes("discord"))
+        return "🎮";
+
+    if (name.includes("telegram"))
+        return "✈️";
+
+    if (name.includes("youtube"))
+        return "▶️";
+
+    if (name.includes("facebook"))
+        return "📘";
+
+    if (name.includes("netflix"))
+        return "N";
+
+    if (name.includes("steam"))
+        return "🎮";
+
+    return service.name
+        .charAt(0)
+        .toUpperCase();
+}
+
+function draw() {
 
     const search =
         (
@@ -204,27 +219,27 @@ function draw(){
             "grid"
         );
 
-    if(!grid)
+    if (!grid)
         return;
 
     grid.innerHTML = "";
 
     services
-        .filter(x => {
+        .filter(service => {
 
-            if(
+            if (
                 currentCategory !== "all" &&
-                x.category !== currentCategory
-            ){
+                service.category !== currentCategory
+            ) {
                 return false;
             }
 
-            return x.name
+            return service.name
                 .toLowerCase()
                 .includes(search);
 
         })
-        .forEach(x => {
+        .forEach(service => {
 
             const card =
                 document.createElement(
@@ -234,85 +249,67 @@ function draw(){
             card.className =
                 "card";
 
-            if(x.enabled)
-                card.classList.add(
-                    "blocked"
-                );
+            card.innerHTML = `
+                <div class="row">
 
-            const big =
-                x.domain_count >= 100
-                ? '<div class="big">HIGH IMPACT</div>'
-                : '';
+                    <div class="left">
 
-            const badgeClass = [
-                "ai",
-                "streaming",
-                "gaming",
-                "social_network",
-                "shopping",
-                "messenger"
-            ].includes(
-                x.category
-            )
-                ? x.category
-                : "default";
+                        <div class="icon">
+                            ${getIcon(service)}
+                        </div>
 
-            const actionText =
-                x.enabled
-                    ? "UNBLOCK"
-                    : "BLOCK";
+                        <div>
 
-            card.innerHTML =
-                `
-                <div class="card-top">
+                            <div class="title">
+                                ${service.name}
+                            </div>
 
-                    <div class="badge ${badgeClass}">
-                        ${x.category}
+                            <div class="meta">
+                                ${service.category}
+                                •
+                                ${service.domain_count}
+                                domains
+                            </div>
+
+                        </div>
+
                     </div>
 
-                </div>
+                    <label class="switch">
 
-                <div class="name">
-                    ${x.name}
-                </div>
+                        <input
+                            type="checkbox"
+                            ${service.enabled ? "checked" : ""}
+                        >
 
-                <div class="meta">
-                    ${x.domain_count}
-                    domains
-                </div>
+                        <span
+                            class="slider"
+                        ></span>
 
-                ${big}
-
-                <div class="status ${
-                    x.enabled
-                    ? "blocked"
-                    : "allowed"
-                }">
-
-                    ${
-                        x.enabled
-                        ? "BLOCKED"
-                        : "ALLOWED"
-                    }
+                    </label>
 
                 </div>
+            `;
 
-                <button
-                    class="toggle-btn"
-                    onclick="toggleService('${x.id}')"
-                >
-                    ${actionText}
-                </button>
-                `;
+            const checkbox =
+                card.querySelector(
+                    "input"
+                );
 
-            grid.appendChild(card);
+            checkbox.addEventListener(
+                "change",
+                () =>
+                    toggleService(
+                        service.id,
+                        checkbox
+                    )
+            );
+
+            grid.appendChild(
+                card
+            );
 
         });
-
 }
 
-(async() => {
-
-    await load();
-
-})();
+load();
