@@ -9,3 +9,5 @@ data/
 .env
 
 *.tgz
+.env.*
+!.env.example
