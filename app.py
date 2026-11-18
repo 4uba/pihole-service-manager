@@ -28,13 +28,13 @@ PIHOLE_PASSWORD = os.getenv("PIHOLE_PASSWORD")
 PIHOLE_SID = None
 
 
-def db():
+def db() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     return conn
 
 
-def get_domains(service_id):
+def get_domains(service_id: str) -> list[str]:
 
     conn = db()
 
@@ -53,7 +53,7 @@ def get_domains(service_id):
     return [x["domain"] for x in rows]
 
 
-def get_group_ids(conn, service_id):
+def get_group_ids(conn: sqlite3.Connection, service_id: str) -> list[int]:
 
     rows = conn.execute(
         """
@@ -68,7 +68,7 @@ def get_group_ids(conn, service_id):
     return [row["group_id"] for row in rows]
 
 
-def pihole_login():
+def pihole_login() -> str:
 
     r = requests.post(
         f"{PIHOLE_URL}/api/auth",
@@ -85,7 +85,7 @@ def pihole_login():
     return data["session"]["sid"]
 
 
-def get_sid():
+def get_sid() -> str:
 
     global PIHOLE_SID
 
@@ -97,14 +97,14 @@ def get_sid():
     return PIHOLE_SID
 
 
-def reset_sid():
+def reset_sid() -> None:
 
     global PIHOLE_SID
 
     PIHOLE_SID = None
 
 
-def pihole_request(method, path, **kwargs):
+def pihole_request(method: str, path: str, **kwargs) -> requests.Response:
     """Call the Pi-hole API, logging in again once if the session expired."""
 
     url = f"{PIHOLE_URL}/api/{path}"
@@ -297,10 +297,7 @@ def catalog_update():
     try:
 
         result = subprocess.run(
-            [
-                "python3",
-                "catalog_update.py"
-            ],
+            ["python3", "catalog_update.py"],
             cwd="/app",
             capture_output=True,
             check=False,
@@ -320,37 +317,26 @@ def catalog_update():
 
         conn = db()
 
-        meta = {
-            row["key"]: row["value"]
-            for row in conn.execute(
-                """
-                select key,value
-                from catalog_meta
-                """
-            ).fetchall()
-        }
+        rows = conn.execute("select key, value from catalog_meta").fetchall()
+
+        meta = {row["key"]: row["value"] for row in rows}
 
         conn.close()
+
+        services_count = meta.get("services_count", "0")
+        domains_count = meta.get("domains_count", "0")
 
         return JSONResponse(
             {
                 "success": True,
-                "services": meta.get(
-                    "services_count",
-                    "0"
-                ),
-                "domains": meta.get(
-                    "domains_count",
-                    "0"
-                ),
-                "last_update": meta.get(
-                    "last_update",
-                    "unknown"
-                ),
-                "message":
+                "services": services_count,
+                "domains": domains_count,
+                "last_update": meta.get("last_update", "unknown"),
+                "message": (
                     f"Catalog updated successfully. "
-                    f"{meta.get('services_count','0')} services, "
-                    f"{meta.get('domains_count','0')} domains."
+                    f"{services_count} services, "
+                    f"{domains_count} domains."
+                )
             }
         )
 
