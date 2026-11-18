@@ -1,13 +1,12 @@
 import os
 import sqlite3
+import subprocess
 
 import requests
-
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-
 
 app = FastAPI()
 
@@ -29,13 +28,13 @@ PIHOLE_PASSWORD = os.getenv("PIHOLE_PASSWORD")
 PIHOLE_SID = None
 
 
-def db():
+def db() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     return conn
 
 
-def get_domains(service_id):
+def get_domains(service_id: str) -> list[str]:
 
     conn = db()
 
@@ -54,7 +53,22 @@ def get_domains(service_id):
     return [x["domain"] for x in rows]
 
 
-def pihole_login():
+def get_group_ids(conn: sqlite3.Connection, service_id: str) -> list[int]:
+
+    rows = conn.execute(
+        """
+        select group_id
+        from service_groups
+        where service_id = ?
+        order by group_id
+        """,
+        (service_id,)
+    ).fetchall()
+
+    return [row["group_id"] for row in rows]
+
+
+def pihole_login() -> str:
 
     r = requests.post(
         f"{PIHOLE_URL}/api/auth",
@@ -71,7 +85,7 @@ def pihole_login():
     return data["session"]["sid"]
 
 
-def get_sid():
+def get_sid() -> str:
 
     global PIHOLE_SID
 
@@ -83,11 +97,39 @@ def get_sid():
     return PIHOLE_SID
 
 
-def reset_sid():
+def reset_sid() -> None:
 
     global PIHOLE_SID
 
     PIHOLE_SID = None
+
+
+def pihole_request(method: str, path: str, **kwargs) -> requests.Response:
+    """Call the Pi-hole API, logging in again once if the session expired."""
+
+    url = f"{PIHOLE_URL}/api/{path}"
+
+    r = requests.request(
+        method,
+        url,
+        headers={"X-FTL-SID": get_sid()},
+        timeout=15,
+        **kwargs
+    )
+
+    if r.status_code in (401, 403):
+
+        reset_sid()
+
+        r = requests.request(
+            method,
+            url,
+            headers={"X-FTL-SID": get_sid()},
+            timeout=15,
+            **kwargs
+        )
+
+    return r
 
 
 @app.get("/")
@@ -157,7 +199,7 @@ async def services():
 
 
 @app.post("/api/toggle/{service_id}")
-async def toggle(service_id: str):
+def toggle(service_id: str):
 
     conn = db()
 
@@ -176,30 +218,8 @@ async def toggle(service_id: str):
 
         domains = get_domains(service_id)
 
-        groups = conn.execute(
-            """
-            select group_id
-            from service_groups
-            where service_id = ?
-            order by group_id
-            """,
-            (service_id,)
-        ).fetchall()
-
-        groups = [
-            row["group_id"]
-            for row in groups
-        ]
-
-        if not groups:
-            groups = [0]
-
-
-        sid = get_sid()
-
-        headers = {
-            "X-FTL-SID": sid
-        }
+        # Pi-hole's "Default" group (id 0) when none are assigned.
+        groups = get_group_ids(conn, service_id) or [0]
 
         if enabled:
 
@@ -213,27 +233,7 @@ async def toggle(service_id: str):
             )
 
             for domain in domains:
-
-                r = requests.delete(
-                    f"{PIHOLE_URL}/api/domains/deny/exact/{domain}",
-                    headers=headers,
-                    timeout=15
-                )
-
-                if r.status_code in (401, 403):
-
-                    reset_sid()
-                    sid = get_sid()
-
-                    headers = {
-                        "X-FTL-SID": sid
-                    }
-
-                    requests.delete(
-                        f"{PIHOLE_URL}/api/domains/deny/exact/{domain}",
-                        headers=headers,
-                        timeout=15
-                    )
+                pihole_request("DELETE", f"domains/deny/exact/{domain}")
 
             new_state = False
 
@@ -251,39 +251,15 @@ async def toggle(service_id: str):
             )
 
             for domain in domains:
-
-                r = requests.post(
-                    f"{PIHOLE_URL}/api/domains/deny/exact",
-                    headers=headers,
+                pihole_request(
+                    "POST",
+                    "domains/deny/exact",
                     json={
                         "domain": domain,
-                            "groups": groups,
-
+                        "groups": groups,
                         "comment": "Service Manager V3"
-                    },
-                    timeout=15
-                )
-
-                if r.status_code in (401, 403):
-
-                    reset_sid()
-                    sid = get_sid()
-
-                    headers = {
-                        "X-FTL-SID": sid
                     }
-
-                    requests.post(
-                        f"{PIHOLE_URL}/api/domains/deny/exact",
-                        headers=headers,
-                        json={
-                            "domain": domain,
-                            "groups": groups,
-
-                            "comment": "Service Manager V3"
-                        },
-                        timeout=15
-                    )
+                )
 
             new_state = True
 
@@ -298,7 +274,7 @@ async def toggle(service_id: str):
             }
         )
 
-    except Exception as ex:
+    except Exception as ex:  # noqa: BLE001 - report any failure as JSON
 
         conn.rollback()
 
@@ -315,20 +291,16 @@ async def toggle(service_id: str):
         conn.close()
 
 
-import subprocess
-
 @app.post("/api/catalog/update")
-async def catalog_update():
+def catalog_update():
 
     try:
 
         result = subprocess.run(
-            [
-                "python3",
-                "catalog_update.py"
-            ],
+            ["python3", "catalog_update.py"],
             cwd="/app",
             capture_output=True,
+            check=False,
             text=True,
             timeout=300
         )
@@ -345,41 +317,30 @@ async def catalog_update():
 
         conn = db()
 
-        meta = {
-            row["key"]: row["value"]
-            for row in conn.execute(
-                """
-                select key,value
-                from catalog_meta
-                """
-            ).fetchall()
-        }
+        rows = conn.execute("select key, value from catalog_meta").fetchall()
+
+        meta = {row["key"]: row["value"] for row in rows}
 
         conn.close()
+
+        services_count = meta.get("services_count", "0")
+        domains_count = meta.get("domains_count", "0")
 
         return JSONResponse(
             {
                 "success": True,
-                "services": meta.get(
-                    "services_count",
-                    "0"
-                ),
-                "domains": meta.get(
-                    "domains_count",
-                    "0"
-                ),
-                "last_update": meta.get(
-                    "last_update",
-                    "unknown"
-                ),
-                "message":
+                "services": services_count,
+                "domains": domains_count,
+                "last_update": meta.get("last_update", "unknown"),
+                "message": (
                     f"Catalog updated successfully. "
-                    f"{meta.get('services_count','0')} services, "
-                    f"{meta.get('domains_count','0')} domains."
+                    f"{services_count} services, "
+                    f"{domains_count} domains."
+                )
             }
         )
 
-    except Exception as ex:
+    except Exception as ex:  # noqa: BLE001 - report any failure as JSON
 
         return JSONResponse(
             {
@@ -391,41 +352,13 @@ async def catalog_update():
 
 
 @app.get("/api/groups")
-async def groups():
+def groups():
 
-    sid = get_sid()
-
-    headers = {
-        "X-FTL-SID": sid
-    }
-
-    r = requests.get(
-        f"{PIHOLE_URL}/api/groups",
-        headers=headers,
-        timeout=15
-    )
-
-    if r.status_code in (401,403):
-
-        reset_sid()
-
-        sid = get_sid()
-
-        headers = {
-            "X-FTL-SID": sid
-        }
-
-        r = requests.get(
-            f"{PIHOLE_URL}/api/groups",
-            headers=headers,
-            timeout=15
-        )
+    r = pihole_request("GET", "groups")
 
     r.raise_for_status()
 
-    return JSONResponse(
-        r.json()
-    )
+    return JSONResponse(r.json())
 
 
 @app.get("/api/service/{service_id}/groups")
@@ -433,25 +366,14 @@ async def service_groups(service_id: str):
 
     conn = db()
 
-    rows = conn.execute(
-        """
-        select group_id
-        from service_groups
-        where service_id = ?
-        order by group_id
-        """,
-        (service_id,)
-    ).fetchall()
+    group_ids = get_group_ids(conn, service_id)
 
     conn.close()
 
     return JSONResponse(
         {
             "service_id": service_id,
-            "groups": [
-                row["group_id"]
-                for row in rows
-            ]
+            "groups": group_ids
         }
     )
 
@@ -464,10 +386,7 @@ async def save_service_groups(
 
     data = await request.json()
 
-    groups = data.get(
-        "groups",
-        []
-    )
+    groups = data.get("groups", [])
 
     conn = db()
 
@@ -508,7 +427,7 @@ async def save_service_groups(
             }
         )
 
-    except Exception as ex:
+    except Exception as ex:  # noqa: BLE001 - report any failure as JSON
 
         conn.rollback()
 
@@ -523,4 +442,3 @@ async def save_service_groups(
     finally:
 
         conn.close()
-

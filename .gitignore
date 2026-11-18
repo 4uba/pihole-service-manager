@@ -11,3 +11,9 @@ data/
 *.tgz
 .env.*
 !.env.example
+.rtk/filters.toml
+.claude/commands/whetstone-status.md
+.claude/commands/whetstone-headroom.md
+.claude/whetstone.json
+STACK-SETUP.md
+CLAUDE.md
