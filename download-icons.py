@@ -2,6 +2,7 @@
 
 import os
 import sqlite3
+
 import requests
 
 DB = "data/app.db"
@@ -23,7 +24,6 @@ with open(f"{OUT}/default.svg", "w", encoding="utf-8") as f:
     f.write(DEFAULT_SVG)
 
 ICON_MAP = {
-
     # AI
     "chatgpt": "openai",
     "claude": "anthropic",
@@ -128,16 +128,17 @@ BASE = "https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icon
 
 conn = sqlite3.connect(DB)
 
-rows = conn.execute("""
-select id,name
-from services
-order by id
-""").fetchall()
+service_ids = [
+    row[0]
+    for row in conn.execute("select id from services order by id")
+]
+
+conn.close()
 
 ok = 0
 missing = 0
 
-for service_id, name in rows:
+for service_id in service_ids:
 
     slug = ICON_MAP.get(service_id)
 
@@ -146,46 +147,24 @@ for service_id, name in rows:
         print(f"NO MAP   {service_id}")
         continue
 
-    url = f"{BASE}/{slug}.svg"
-
     try:
-
-        r = requests.get(
-            url,
-            timeout=20
-        )
+        r = requests.get(f"{BASE}/{slug}.svg", timeout=20)
 
         if r.status_code != 200:
-
             missing += 1
-
-            print(
-                f"MISS     {service_id} -> {slug}"
-            )
-
+            print(f"MISS     {service_id} -> {slug}")
             continue
 
-        with open(
-            f"{OUT}/{service_id}.svg",
-            "wb"
-        ) as f:
+        with open(f"{OUT}/{service_id}.svg", "wb") as f:
             f.write(r.content)
 
-        ok += 1
-
-        print(
-            f"OK       {service_id}"
-        )
-
-    except Exception as e:
-
+    except (requests.RequestException, OSError) as e:
         missing += 1
+        print(f"ERROR    {service_id}: {e}")
+        continue
 
-        print(
-            f"ERROR    {service_id}: {e}"
-        )
-
-conn.close()
+    ok += 1
+    print(f"OK       {service_id}")
 
 print()
 print(f"Downloaded : {ok}")
