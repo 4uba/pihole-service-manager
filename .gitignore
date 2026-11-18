@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+data/
+*.db
+
+.env
+
+*.tgz
+.env.*
+!.env.example
