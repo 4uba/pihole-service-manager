@@ -176,6 +176,25 @@ async def toggle(service_id: str):
 
         domains = get_domains(service_id)
 
+        groups = conn.execute(
+            """
+            select group_id
+            from service_groups
+            where service_id = ?
+            order by group_id
+            """,
+            (service_id,)
+        ).fetchall()
+
+        groups = [
+            row["group_id"]
+            for row in groups
+        ]
+
+        if not groups:
+            groups = [0]
+
+
         sid = get_sid()
 
         headers = {
@@ -238,6 +257,8 @@ async def toggle(service_id: str):
                     headers=headers,
                     json={
                         "domain": domain,
+                            "groups": groups,
+
                         "comment": "Service Manager V3"
                     },
                     timeout=15
@@ -257,6 +278,8 @@ async def toggle(service_id: str):
                         headers=headers,
                         json={
                             "domain": domain,
+                            "groups": groups,
+
                             "comment": "Service Manager V3"
                         },
                         timeout=15
@@ -365,3 +388,139 @@ async def catalog_update():
             },
             status_code=500
         )
+
+
+@app.get("/api/groups")
+async def groups():
+
+    sid = get_sid()
+
+    headers = {
+        "X-FTL-SID": sid
+    }
+
+    r = requests.get(
+        f"{PIHOLE_URL}/api/groups",
+        headers=headers,
+        timeout=15
+    )
+
+    if r.status_code in (401,403):
+
+        reset_sid()
+
+        sid = get_sid()
+
+        headers = {
+            "X-FTL-SID": sid
+        }
+
+        r = requests.get(
+            f"{PIHOLE_URL}/api/groups",
+            headers=headers,
+            timeout=15
+        )
+
+    r.raise_for_status()
+
+    return JSONResponse(
+        r.json()
+    )
+
+
+@app.get("/api/service/{service_id}/groups")
+async def service_groups(service_id: str):
+
+    conn = db()
+
+    rows = conn.execute(
+        """
+        select group_id
+        from service_groups
+        where service_id = ?
+        order by group_id
+        """,
+        (service_id,)
+    ).fetchall()
+
+    conn.close()
+
+    return JSONResponse(
+        {
+            "service_id": service_id,
+            "groups": [
+                row["group_id"]
+                for row in rows
+            ]
+        }
+    )
+
+
+@app.post("/api/service/{service_id}/groups")
+async def save_service_groups(
+    service_id: str,
+    request: Request
+):
+
+    data = await request.json()
+
+    groups = data.get(
+        "groups",
+        []
+    )
+
+    conn = db()
+
+    try:
+
+        conn.execute(
+            """
+            delete
+            from service_groups
+            where service_id = ?
+            """,
+            (service_id,)
+        )
+
+        for group_id in groups:
+
+            conn.execute(
+                """
+                insert into service_groups(
+                    service_id,
+                    group_id
+                )
+                values(?,?)
+                """,
+                (
+                    service_id,
+                    int(group_id)
+                )
+            )
+
+        conn.commit()
+
+        return JSONResponse(
+            {
+                "success": True,
+                "service_id": service_id,
+                "groups": groups
+            }
+        )
+
+    except Exception as ex:
+
+        conn.rollback()
+
+        return JSONResponse(
+            {
+                "success": False,
+                "error": str(ex)
+            },
+            status_code=500
+        )
+
+    finally:
+
+        conn.close()
+
